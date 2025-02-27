@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Osciline Effect</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="controls" id="controlPanel">
+        <div class="controls-header">
+            <h3>Osciline Controls</h3>
+            <div class="control-buttons">
+                <button id="dockButton" title="Dock to side">📌</button>
+                <button id="minimizeButton" title="Minimize">_</button>
+            </div>
+        </div>
+        <div class="controls-content">
+            <input type="file" id="fileInput" accept="image/*,video/*">
+            <div class="settings">
+                <label>Line Count:
+                    <input type="range" id="rows" min="10" max="1000" value="100">
+                </label>
+                <label>Line Weight:
+                    <input type="range" id="weight" min="0.1" max="5" value="0.5" step="0.05">
+                </label>
+                <label>Brightness:
+                    <input type="range" id="brightness" min="0" max="200" value="100">
+                </label>
+                <label>Base Amplitude:
+                    <input type="range" id="baseAmplitude" min="1" max="100" value="0">
+                </label>
+                <label>Base Frequency:
+                    <input type="range" id="baseFrequency" min="1" max="100" value="0">
+                </label>
+                <label>Wave Complexity:
+                    <input type="range" id="waveComplexity" min="1" max="10" value="0">
+                </label>
+                <label>Desync Amount:
+                    <input type="range" id="desyncAmount" min="0" max="100" value="0">
+                </label>
+            </div>
+            <button id="exportSvg">Export SVG</button>
+            <div id="status">Loading detection model...</div>
+        </div>
+    </div>
+    <div id="container"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <script src="app.js"></script>
+</body>
+</html>
