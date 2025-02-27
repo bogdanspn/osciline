@@ -11,7 +11,6 @@ class OscilineEffect {
         this.detectionTexture = null;
         this.loadDetectionModel();
         
-
         this.setupScene();
         this.setupControls();
         this.setupExport();
@@ -23,6 +22,7 @@ class OscilineEffect {
     async loadDetectionModel() {
         this.model = await cocoSsd.load();
         document.getElementById('status').textContent = 'Model loaded';
+        this.loadDefaultImage();
     }
 
     setupScene() {
@@ -375,6 +375,38 @@ class OscilineEffect {
             minimizeButton.innerHTML = panel.classList.contains('minimized') ? '□' : '_';
             localStorage.setItem('controlPanelMinimized', panel.classList.contains('minimized'));
         });
+    }
+
+    loadDefaultImage() {
+        const defaultImagePath = './images/daddy.jpg';
+        console.log('Loading default image from:', defaultImagePath);
+        
+        const img = new Image();
+        img.crossOrigin = "anonymous";  // Add this if needed for CORS
+        
+        img.onload = () => {
+            console.log('Default image loaded successfully');
+            const texture = new THREE.TextureLoader().load(defaultImagePath, 
+                // Success callback
+                (tex) => {
+                    console.log('Texture created successfully');
+                    this.material.uniforms.tDiffuse.value = tex;
+                    this.processDetections(img);
+                },
+                // Progress callback
+                null,
+                // Error callback
+                (err) => console.error('Error creating texture:', err)
+            );
+        };
+        
+        img.onerror = (error) => {
+            console.error('Error loading default image:', error);
+            console.error('Image path tried:', img.src);
+            document.getElementById('status').textContent = 'Error loading default image';
+        };
+        
+        img.src = defaultImagePath;
     }
 
     getVertexShader() {
