@@ -153,7 +153,7 @@ class OscilineEffect {
     }
 
     setupExport() {
-        document.getElementById('exportSvg').addEventListener('click', () => this.exportSVG());
+        document.getElementById('exportSvg').addEventListener('click', () => this.exportHighQualitySVG());
 
         // Add video recording
         const recordButton = document.getElementById('recordVideo');
@@ -161,59 +161,56 @@ class OscilineEffect {
     }
 
     exportSVG() {
-        const width = this.renderer.domElement.width;
-        const height = this.renderer.domElement.height;
-        const rows = this.material.uniforms.rows.value;
-        const spacing = height / rows;
-        const lineWeight = Math.max(1, this.material.uniforms.weight.value);
-        
         try {
-            // Create offscreen canvas for texture sampling
-            this.exportCanvas = this.exportCanvas || document.createElement('canvas');
-            this.exportCtx = this.exportCtx || this.exportCanvas.getContext('2d');
+            // Get dimensions and colors
+            const canvas = this.renderer.domElement;
+            const width = canvas.width;
+            const height = canvas.height;
+            const lineWeight = Math.max(0.5, this.material.uniforms.weight.value);
+            const rows = this.material.uniforms.rows.value;
+            const spacing = height / rows;
             
-            // Setup texture sampling
-            let textureImage = null;
-            if (this.material.uniforms.tDiffuse.value) {
-                if (this.material.uniforms.tDiffuse.value.isVideoTexture) {
-                    textureImage = this.material.uniforms.tDiffuse.value.image;
-                } else {
-                    textureImage = this.material.uniforms.tDiffuse.value.image;
-                }
+            // Get colors from material uniforms
+            const bgColor = this.material.uniforms.backgroundColor.value;
+            const lineColor = this.material.uniforms.lineColor.value;
+            
+            const bgHexColor = '#' + 
+                Math.floor(bgColor.x * 255).toString(16).padStart(2, '0') +
+                Math.floor(bgColor.y * 255).toString(16).padStart(2, '0') +
+                Math.floor(bgColor.z * 255).toString(16).padStart(2, '0');
                 
-                this.exportCanvas.width = textureImage.width || width;
-                this.exportCanvas.height = textureImage.height || height;
-                this.exportCtx.drawImage(textureImage, 0, 0);
-            }
-
-            // Get current line color from uniform
-            const color = this.material.uniforms.lineColor.value;
-            const hexColor = '#' + 
-                Math.floor(color.x * 255).toString(16).padStart(2, '0') +
-                Math.floor(color.y * 255).toString(16).padStart(2, '0') +
-                Math.floor(color.z * 255).toString(16).padStart(2, '0');
-
-            // Create SVG document with current color
+            const lineHexColor = '#' + 
+                Math.floor(lineColor.x * 255).toString(16).padStart(2, '0') +
+                Math.floor(lineColor.y * 255).toString(16).padStart(2, '0') +
+                Math.floor(lineColor.z * 255).toString(16).padStart(2, '0');
+            
+            // Create a high-resolution PNG
+            const dataURL = canvas.toDataURL('image/png');
+            
+            // Start SVG with background and viewBox
             let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">
-                <style>path { stroke: ${hexColor}; stroke-width: ${lineWeight}px; fill: none; }</style>`;
+                <rect width="100%" height="100%" fill="${bgHexColor}"/>
+                <style>image { width: 100%; height: 100%; } path { stroke: ${lineHexColor}; stroke-width: ${lineWeight}px; fill: none; }</style>
+                <image href="${dataURL}" />
+            `;
             
-            // Generate paths for each line
-            for (let i = 0; i < rows; i++) {
-                const y = i * spacing;
-                let pathPoints = [];
-                
-                // Sample points across the width
-                for (let x = 0; x < width; x += 2) {
-                    const uv = { x: x / width, y: y / height };
-                    const wave = this.calculateWaveAtPoint(uv, i);
-                    const disruption = textureImage ? this.calculateDisruptionAtPoint(uv) : 0;
-                    const finalY = y + wave * height + disruption * height;
-                    pathPoints.push(`${x.toFixed(1)},${finalY.toFixed(1)}`);
-                }
-                
-                // Create smooth path
-                svg += `<path d="M ${pathPoints.join(' L ')}" />`;
-            }
+            // Add SVG filters to extract lines
+            svg += `
+                <filter id="extractLines">
+                    <feColorMatrix type="matrix" values="0 0 0 0 0
+                                                        0 0 0 0 0
+                                                        0 0 0 0 0
+                                                        1 1 1 0 0" />
+                    <feComponentTransfer>
+                        <feFuncR type="linear" slope="10" intercept="-4"/>
+                        <feFuncG type="linear" slope="10" intercept="-4"/>
+                        <feFuncB type="linear" slope="10" intercept="-4"/>
+                    </feComponentTransfer>
+                </filter>
+                <g filter="url(#extractLines)">
+                    <rect width="${width}" height="${height}" fill="none" />
+                </g>
+            `;
             
             svg += '</svg>';
             
@@ -221,16 +218,188 @@ class OscilineEffect {
             const blob = new Blob([svg], { type: 'image/svg+xml' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
-            link.download = 'scanlines.svg';
+            link.download = 'osciline.svg';
             link.href = url;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
-            
-            console.log('SVG export complete');
         } catch (error) {
             console.error('SVG export failed:', error);
+        }
+    }
+
+    exportHighQualitySVG() {
+        // Show export status
+        const statusEl = document.getElementById('status');
+        const originalStatus = statusEl.textContent;
+        statusEl.textContent = 'Generating SVG...';
+        
+        // Use setTimeout to allow UI to update before starting heavy work
+        setTimeout(() => {
+            try {
+                // Get dimensions and settings
+                const width = this.renderer.domElement.width;
+                const height = this.renderer.domElement.height;
+                const rows = Math.min(300, this.material.uniforms.rows.value); // Limit rows for performance
+                const spacing = height / rows;
+                const lineWeight = Math.max(0.5, this.material.uniforms.weight.value);
+                
+                // Get colors
+                const bgColor = this.material.uniforms.backgroundColor.value;
+                const lineColor = this.material.uniforms.lineColor.value;
+                
+                const bgHexColor = '#' + 
+                    Math.floor(bgColor.x * 255).toString(16).padStart(2, '0') +
+                    Math.floor(bgColor.y * 255).toString(16).padStart(2, '0') +
+                    Math.floor(bgColor.z * 255).toString(16).padStart(2, '0');
+                    
+                const lineHexColor = '#' + 
+                    Math.floor(lineColor.x * 255).toString(16).padStart(2, '0') +
+                    Math.floor(lineColor.y * 255).toString(16).padStart(2, '0') +
+                    Math.floor(lineColor.z * 255).toString(16).padStart(2, '0');
+                
+                // Start SVG
+                let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">
+                    <rect width="100%" height="100%" fill="${bgHexColor}"/>
+                    <style>path { stroke: ${lineHexColor}; stroke-width: ${lineWeight}px; fill: none; }</style>`;
+                
+                // For performance, create paths in batches
+                const batchSize = 10;
+                let currentBatch = 0;
+                const totalBatches = Math.ceil(rows / batchSize);
+                
+                const generateBatch = () => {
+                    const startRow = currentBatch * batchSize;
+                    const endRow = Math.min(startRow + batchSize, rows);
+                    
+                    // Process one batch of rows
+                    for (let i = endRow - 1; i >= startRow; i--) {
+                        const y = i * spacing;
+                        let pathPoints = [];
+                        
+                        // Sample less points for better performance
+                        const step = Math.max(1, Math.floor(width / 300));
+                        
+                        for (let x = 0; x < width; x += step) {
+                            const uv = { x: x / width, y: y / height };
+                            const wave = this.calculateWaveAtPoint(uv, i);
+                            const disruption = this.material.uniforms.tDiffuse.value ? 
+                                this.calculateImageDisruptionAtPoint(uv) : 0;
+                            
+                            // FIX: Invert disruption direction to match screen rendering
+                            const finalY = y + wave * height - disruption * height; // Note the negative sign
+                            
+                            pathPoints.push(`${x},${finalY.toFixed(1)}`);
+                        }
+                        
+                        if (pathPoints.length > 1) {
+                            svg += `<path d="M ${pathPoints.join(' L ')}" />`;
+                        }
+                    }
+                    
+                    currentBatch++;
+                    
+                    // Update status
+                    statusEl.textContent = `Generating SVG... ${Math.floor((currentBatch/totalBatches) * 100)}%`;
+                    
+                    if (currentBatch < totalBatches) {
+                        // Process next batch in next animation frame
+                        requestAnimationFrame(generateBatch);
+                    } else {
+                        // Finalize and download SVG
+                        svg += '</svg>';
+                        
+                        const blob = new Blob([svg], { type: 'image/svg+xml' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.download = 'osciline.svg';
+                        link.href = url;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                        
+                        // Reset status
+                        statusEl.textContent = originalStatus;
+                    }
+                };
+                
+                // Start batch processing
+                generateBatch();
+                
+            } catch (error) {
+                console.error('SVG export failed:', error);
+                statusEl.textContent = 'SVG export failed';
+                setTimeout(() => { statusEl.textContent = originalStatus; }, 3000);
+            }
+        }, 100); // Short delay to update UI
+    }
+    
+    calculateImageDisruptionAtPoint(uv) {
+        try {
+            if (!this.material.uniforms.tDiffuse.value) return 0;
+            
+            // For video textures
+            if (this.material.uniforms.tDiffuse.value.isVideoTexture) {
+                const video = this.material.uniforms.tDiffuse.value.image;
+                if (!video || video.videoWidth === 0) return 0;
+                
+                // Cache canvas for performance
+                if (!this._videoCanvas) {
+                    this._videoCanvas = document.createElement('canvas');
+                    this._videoCtx = this._videoCanvas.getContext('2d');
+                    this._videoCanvas.width = video.videoWidth;
+                    this._videoCanvas.height = video.videoHeight;
+                }
+                
+                // Only redraw when needed
+                if (!this._lastVideoTime || this._lastVideoTime !== video.currentTime) {
+                    this._videoCtx.drawImage(video, 0, 0);
+                    this._lastVideoTime = video.currentTime;
+                }
+                
+                const x = Math.floor(uv.x * this._videoCanvas.width);
+                const y = Math.floor(uv.y * this._videoCanvas.height);
+                const pixel = this._videoCtx.getImageData(x, y, 1, 1).data;
+                const brightness = (pixel[0] + pixel[1] + pixel[2]) / (255 * 3);
+                return brightness * 0.1;
+            }
+            
+            // For image textures - use caching for performance
+            if (!this._imageCache) {
+                this._imageCache = {};
+            }
+            
+            const img = this.material.uniforms.tDiffuse.value.image;
+            if (!img || !img.width) return 0;
+            
+            const cacheKey = img.src || 'default';
+            
+            if (!this._imageCache[cacheKey]) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = img.width;
+                tempCanvas.height = img.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(img, 0, 0);
+                
+                // Cache the image data for faster access
+                this._imageCache[cacheKey] = {
+                    canvas: tempCanvas,
+                    ctx: tempCtx,
+                    imageData: tempCtx.getImageData(0, 0, img.width, img.height)
+                };
+            }
+            
+            const cache = this._imageCache[cacheKey];
+            const x = Math.floor(uv.x * cache.canvas.width);
+            const y = Math.floor(uv.y * cache.canvas.height);
+            const idx = (y * cache.canvas.width + x) * 4;
+            const data = cache.imageData.data;
+            const brightness = (data[idx] + data[idx+1] + data[idx+2]) / (255 * 3);
+            return brightness * 0.1;
+        } catch (e) {
+            return 0;
         }
     }
 
@@ -689,28 +858,26 @@ class OscilineEffect {
             void main() {
                 vec2 uv = vUv;
                 float spacing = 1.0 / rows;
-                float lineY = 0.0;
-                vec4 finalColor = vec4(0.0);
+                vec4 finalColor = vec4(backgroundColor, 1.0);
                 
-                for(float i = 0.0; i < rows; i++) {
-                    lineY = i * spacing;
-                    
+                // Process from bottom to top
+                for(float i = rows - 1.0; i >= 0.0; i--) {
+                    float lineY = i * spacing;
                     float wave = baseWave(uv, i);
                     float disruption = getImageInfluence(vec2(uv.x, lineY));
                     float finalY = lineY + wave + disruption;
                     
-                    // Simplified line rendering with hard edges
                     float halfWeight = (weight / rows) * 0.15;
                     float dist = abs(uv.y - finalY);
-                    float line = float(dist < halfWeight);
                     
-                    // Create line color with exact RGB values from uniform
-                    vec4 currentLineColor = vec4(lineColor.rgb, 1.0);
-                    finalColor = max(finalColor, line * currentLineColor);
+                    // Improved line rendering
+                    float lineIntensity = 1.0 - smoothstep(0.0, halfWeight, dist);
+                    lineIntensity = pow(lineIntensity, 1.2); // Sharpen edges slightly
+                    
+                    vec4 currentLineColor = vec4(lineColor.rgb, lineIntensity);
+                    finalColor = mix(finalColor, currentLineColor, lineIntensity);
                 }
 
-                // Mix line color with background
-                finalColor = mix(vec4(backgroundColor, 1.0), finalColor, finalColor.a);
                 gl_FragColor = finalColor * brightness;
             }
         `;
