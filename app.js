@@ -29,6 +29,7 @@ class OscilineEffect {
         this.isRecording = false;
         this.mediaRecorder = null;
         this.recordedChunks = [];
+        this.aspectRatio = 16/9; // Default aspect ratio
     }
 
     async loadDetectionModel() {
@@ -61,7 +62,8 @@ class OscilineEffect {
                 waveComplexity: { value: 0.0 },
                 desyncAmount: { value: 0.0 },    // 20/100
                 resolution: { value: new THREE.Vector2() },
-                lineColor: { value: new THREE.Vector3(0, 1, 0.2) } // Default green color
+                lineColor: { value: new THREE.Vector3(0, 1, 0.2) }, // Default green color
+                backgroundColor: { value: new THREE.Vector3(0, 0, 0) } // Default black
             },
             vertexShader: this.getVertexShader(),
             fragmentShader: this.getFragmentShader()
@@ -138,6 +140,15 @@ class OscilineEffect {
             const g = parseInt(color.substr(3,2), 16) / 255;
             const b = parseInt(color.substr(5,2), 16) / 255;
             this.material.uniforms.lineColor.value.set(r, g, b);
+        });
+
+        // Add background color control
+        document.getElementById('bgColor').addEventListener('input', (e) => {
+            const color = e.target.value;
+            const r = parseInt(color.substr(1,2), 16) / 255;
+            const g = parseInt(color.substr(3,2), 16) / 255;
+            const b = parseInt(color.substr(5,2), 16) / 255;
+            this.material.uniforms.backgroundColor.value.set(r, g, b);
         });
     }
 
@@ -349,6 +360,9 @@ class OscilineEffect {
                     return;
                 }
                 
+                this.aspectRatio = img.width / img.height;
+                this.handleResize();
+                
                 const texture = new THREE.TextureLoader().load(e.target.result);
                 this.material.uniforms.tDiffuse.value = texture;
                 this.processDetections(img);
@@ -372,6 +386,9 @@ class OscilineEffect {
                 console.error('Invalid video dimensions');
                 return;
             }
+            
+            this.aspectRatio = video.videoWidth / video.videoHeight;
+            this.handleResize();
             
             video.play();
             const texture = new THREE.VideoTexture(video);
@@ -405,7 +422,12 @@ class OscilineEffect {
 
     handleResize() {
         const width = window.innerWidth;
-        const height = window.innerHeight;
+        const height = width / this.aspectRatio;
+        
+        this.renderer.domElement.style.width = '100%';
+        this.renderer.domElement.style.height = 'auto';
+        this.renderer.domElement.style.aspectRatio = `${this.aspectRatio}`;
+        
         this.renderer.setSize(width, height);
         this.material.uniforms.resolution.value.set(width, height);
     }
@@ -529,20 +551,28 @@ class OscilineEffect {
         console.log('Loading default image from:', defaultImagePath);
         
         const img = new Image();
-        img.crossOrigin = "anonymous";  // Add this if needed for CORS
+        img.crossOrigin = "anonymous";
         
         img.onload = () => {
             console.log('Default image loaded successfully');
-            const texture = new THREE.TextureLoader().load(defaultImagePath, 
-                // Success callback
+            if (img.width === 0 || img.height === 0) {
+                console.error('Invalid image dimensions');
+                return;
+            }
+            
+            // Set aspect ratio before creating texture
+            this.aspectRatio = img.width / img.height;
+            this.handleResize();
+            
+            const texture = new THREE.TextureLoader().load(
+                defaultImagePath,
                 (tex) => {
                     console.log('Texture created successfully');
                     this.material.uniforms.tDiffuse.value = tex;
                     this.processDetections(img);
+                    this.handleResize(); // Ensure proper sizing after texture load
                 },
-                // Progress callback
                 null,
-                // Error callback
                 (err) => console.error('Error creating texture:', err)
             );
         };
@@ -585,6 +615,7 @@ class OscilineEffect {
             uniform float desyncAmount;
             uniform vec2 resolution;
             uniform vec3 lineColor;
+            uniform vec3 backgroundColor;
             varying vec2 vUv;
 
             // Improved random function with better distribution
@@ -655,6 +686,8 @@ class OscilineEffect {
                     finalColor = max(finalColor, line * currentLineColor);
                 }
 
+                // Mix line color with background
+                finalColor = mix(vec4(backgroundColor, 1.0), finalColor, finalColor.a);
                 gl_FragColor = finalColor * brightness;
             }
         `;
