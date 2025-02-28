@@ -11,10 +11,10 @@ body {
     top: 20px;
     left: 20px;
     z-index: 100;
-    background: rgba(20, 20, 20, 0.95);
+    background: rgba(15, 15, 15, 0.95);
     padding: 0;
     border-radius: 8px;
-    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    box-shadow: 0 0 20px rgba(0,0,0,0.7);
     min-width: 250px;
     transition: transform 0.05s ease-out;
     backdrop-filter: blur(10px);
@@ -29,7 +29,7 @@ body {
     right: auto;
     height: 100vh;
     border-radius: 0;
-    border-left: 1px solid #8ff3;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
     transition: none;
     transform: none !important;
 }
@@ -43,8 +43,8 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 10px 15px;
-    background: rgba(0,255,255,0.1);
-    border-bottom: 1px solid #8ff3;
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     cursor: move;
     border-radius: 8px 8px 0 0;
     user-select: none;
@@ -58,7 +58,7 @@ body {
 .controls-header h3 {
     margin: 0;
     font-size: 14px;
-    color: #8ff;
+    color: #ddd;
     font-family: inherit;
     letter-spacing: 0.05em;
 }
@@ -71,7 +71,7 @@ body {
 .control-buttons button {
     background: transparent;
     border: none;
-    color: #8ff;
+    color: #ddd;
     cursor: pointer;
     width: 24px;
     height: 24px;
@@ -82,7 +82,7 @@ body {
 }
 
 .control-buttons button:hover {
-    background: rgba(140, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .controls-content {
@@ -92,7 +92,7 @@ body {
 .settings {
     margin-top: 15px;
     display: grid;
-    gap: 15px;
+   
 }
 
 label {
@@ -112,7 +112,7 @@ label {
     display: block;
     margin: 10px 0;
     font-size: 12px;
-    color: #8ff;
+    color: #ddd;
     font-family: inherit;
     letter-spacing: 0.05em;
 }
@@ -125,7 +125,7 @@ label {
 input[type="range"] {
     width: 100%;
     margin-top: 8px;
-    accent-color: #8ff;
+    accent-color: #666;
 }
 
 input[type="color"] {
@@ -142,23 +142,23 @@ input[type="color"]::-webkit-color-swatch-wrapper {
 }
 
 input[type="color"]::-webkit-color-swatch {
-    border: 1px solid #8ff3;
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 4px;
 }
 
 #fileInput {
     width: 100%;
     padding: 8px;
-    background: rgba(140, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
     border-radius: 4px;
-    border: 1px solid #8ff3;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     box-sizing: border-box;
 }
 
 #status {
     margin-top: 15px;
     font-size: 12px;
-    color: #8ff;
+    color: #aaa;
     text-align: center;
     font-family: inherit;
     letter-spacing: 0.05em;
@@ -176,9 +176,9 @@ input[type="color"]::-webkit-color-swatch {
     flex: 1;
     height: 36px;
     padding: 0;
-    background: #2a2a2a;
-    border: 1px solid #8ff;
-    color: #8ff;
+    background: #222;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #ddd;
     border-radius: 4px;
     cursor: pointer;
     font-size: 12px;
@@ -197,7 +197,7 @@ button#recordVideo.recording {
 }
 
 .export-buttons button:hover {
-    background: #3a3a3a;
+    background: #333;
 }
 
 
