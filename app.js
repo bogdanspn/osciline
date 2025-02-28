@@ -434,11 +434,21 @@ class OscilineEffect {
     }
 
     handleResize() {
-        const width = window.innerWidth;
-        const height = width / this.aspectRatio;
+        const containerHeight = window.innerHeight * 0.9; // Use 90% of viewport height
+        let width, height;
+
+        if (this.aspectRatio >= 1) {
+            // Wide or square media: fit to height
+            height = containerHeight;
+            width = height * this.aspectRatio;
+        } else {
+            // Tall media: fit to height
+            height = containerHeight;
+            width = height * this.aspectRatio;
+        }
         
-        this.renderer.domElement.style.width = '100%';
-        this.renderer.domElement.style.height = 'auto';
+        this.renderer.domElement.style.width = 'auto';
+        this.renderer.domElement.style.height = '90vh';
         this.renderer.domElement.style.aspectRatio = `${this.aspectRatio}`;
         
         this.renderer.setSize(width, height);
