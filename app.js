@@ -17,6 +17,18 @@ class OscilineEffect {
         this.setupDragAndDock();
         this.animate();
         this.handleResize();
+
+        this.lastUpdateTime = 0;
+        this.smoothedValues = {
+            baseAmplitude: 0.0,
+            baseFrequency: 0.0,
+            waveComplexity: 0.0,
+            desyncAmount: 0.0
+        };
+
+        this.isRecording = false;
+        this.mediaRecorder = null;
+        this.recordedChunks = [];
     }
 
     async loadDetectionModel() {
@@ -44,12 +56,12 @@ class OscilineEffect {
                 brightness: { value: 1.0 },
                 numDetections: { value: 0 },
                 time: { value: 0.0 },
-                baseAmplitude: { value: 0.0 },
-                baseFrequency: { value: 0.0 },
-                phaseOffset: { value: 0.0 },
+                baseAmplitude: { value: 0.0 },  // 20/1000
+                baseFrequency: { value: 0.0 },   // 20/10
                 waveComplexity: { value: 0.0 },
-                desyncAmount: { value: 0.0 },
-                resolution: { value: new THREE.Vector2() }
+                desyncAmount: { value: 0.0 },    // 20/100
+                resolution: { value: new THREE.Vector2() },
+                lineColor: { value: new THREE.Vector3(0, 1, 0.2) } // Default green color
             },
             vertexShader: this.getVertexShader(),
             fragmentShader: this.getFragmentShader()
@@ -82,25 +94,59 @@ class OscilineEffect {
         });
 
         // Wave controls
-        document.getElementById('baseAmplitude').addEventListener('input', (e) => {
-            this.material.uniforms.baseAmplitude.value = parseFloat(e.target.value) / 1000;
-        });
+        const smoothControl = (id, uniformName, scale = 1) => {
+            const element = document.getElementById(id);
+            let updateTimer;
+            
+            element.addEventListener('input', (e) => {
+                clearTimeout(updateTimer);
+                const targetValue = parseFloat(e.target.value) / scale;
+                
+                // Start smooth transition
+                const startValue = this.smoothedValues[uniformName];
+                const startTime = performance.now();
+                const duration = 100; // 100ms transition
+                
+                const animate = () => {
+                    const now = performance.now();
+                    const progress = Math.min((now - startTime) / duration, 1);
+                    
+                    // Smooth interpolation
+                    this.smoothedValues[uniformName] = startValue + (targetValue - startValue) * progress;
+                    this.material.uniforms[uniformName].value = this.smoothedValues[uniformName];
+                    
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    }
+                };
+                
+                animate();
+            });
+        };
 
-        document.getElementById('baseFrequency').addEventListener('input', (e) => {
-            this.material.uniforms.baseFrequency.value = parseFloat(e.target.value) / 10;
-        });
+        // Apply smooth controls
+        smoothControl('baseAmplitude', 'baseAmplitude', 1000);
+        smoothControl('baseFrequency', 'baseFrequency', 10);
+        smoothControl('waveComplexity', 'waveComplexity', 1);
+        smoothControl('desyncAmount', 'desyncAmount', 100);
 
-        document.getElementById('waveComplexity').addEventListener('input', (e) => {
-            this.material.uniforms.waveComplexity.value = parseFloat(e.target.value);
-        });
-
-        document.getElementById('desyncAmount').addEventListener('input', (e) => {
-            this.material.uniforms.desyncAmount.value = parseFloat(e.target.value) / 100;
+        // Add color control
+        document.getElementById('lineColor').addEventListener('input', (e) => {
+            const color = e.target.value;
+            // Convert hex to RGB
+            const r = parseInt(color.substr(1,2), 16) / 255;
+            const g = parseInt(color.substr(3,2), 16) / 255;
+            const b = parseInt(color.substr(5,2), 16) / 255;
+            this.material.uniforms.lineColor.value.set(r, g, b);
         });
     }
 
     setupExport() {
         document.getElementById('exportSvg').addEventListener('click', () => this.exportSVG());
+
+        // Add video recording
+        const recordButton = document.getElementById('recordVideo');
+        recordButton.addEventListener('click', () => this.toggleRecording());
     }
 
     exportSVG() {
@@ -129,9 +175,16 @@ class OscilineEffect {
                 this.exportCtx.drawImage(textureImage, 0, 0);
             }
 
-            // Create SVG document
+            // Get current line color from uniform
+            const color = this.material.uniforms.lineColor.value;
+            const hexColor = '#' + 
+                Math.floor(color.x * 255).toString(16).padStart(2, '0') +
+                Math.floor(color.y * 255).toString(16).padStart(2, '0') +
+                Math.floor(color.z * 255).toString(16).padStart(2, '0');
+
+            // Create SVG document with current color
             let svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">
-                <style>path { stroke: #00ff33; stroke-width: ${lineWeight}px; fill: none; }</style>`;
+                <style>path { stroke: ${hexColor}; stroke-width: ${lineWeight}px; fill: none; }</style>`;
             
             // Generate paths for each line
             for (let i = 0; i < rows; i++) {
@@ -167,6 +220,57 @@ class OscilineEffect {
             console.log('SVG export complete');
         } catch (error) {
             console.error('SVG export failed:', error);
+        }
+    }
+
+    toggleRecording() {
+        if (this.isRecording) {
+            this.stopRecording();
+        } else {
+            this.startRecording();
+        }
+    }
+
+    startRecording() {
+        const stream = this.renderer.domElement.captureStream(30); // 30 FPS
+        this.recordedChunks = [];
+        
+        this.mediaRecorder = new MediaRecorder(stream, {
+            mimeType: 'video/webm;codecs=vp9'
+        });
+
+        this.mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                this.recordedChunks.push(event.data);
+            }
+        };
+
+        this.mediaRecorder.onstop = () => {
+            const blob = new Blob(this.recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'osciline-recording.webm';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+
+        this.mediaRecorder.start();
+        this.isRecording = true;
+        const recordButton = document.getElementById('recordVideo');
+        recordButton.textContent = 'Stop Recording';
+        recordButton.classList.add('recording');
+    }
+
+    stopRecording() {
+        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+            this.mediaRecorder.stop();
+            this.isRecording = false;
+            const recordButton = document.getElementById('recordVideo');
+            recordButton.textContent = 'Record Video';
+            recordButton.classList.remove('recording');
         }
     }
 
@@ -210,22 +314,29 @@ class OscilineEffect {
     }
 
     async processDetections(image) {
-        if (!this.model) return;
+        if (!this.model || !image || !image.width || !image.height) {
+            console.warn('Invalid image data for detection');
+            return;
+        }
         
-        const detections = await this.model.detect(image);
-        const detectionData = new Float32Array(1024 * 4);
-        
-        detections.forEach((detection, i) => {
-            const [x, y, width, height] = detection.bbox;
-            detectionData[i * 4] = x / image.width;
-            detectionData[i * 4 + 1] = y / image.height;
-            detectionData[i * 4 + 2] = width / image.width;
-            detectionData[i * 4 + 3] = height / height;
-        });
+        try {
+            const detections = await this.model.detect(image);
+            const detectionData = new Float32Array(1024 * 4);
+            
+            detections.forEach((detection, i) => {
+                const [x, y, width, height] = detection.bbox;
+                detectionData[i * 4] = x / image.width;
+                detectionData[i * 4 + 1] = y / image.height;
+                detectionData[i * 4 + 2] = width / image.width;
+                detectionData[i * 4 + 3] = height / height;
+            });
 
-        this.detectionTexture.image.data = detectionData;
-        this.detectionTexture.needsUpdate = true;
-        this.material.uniforms.numDetections.value = detections.length;
+            this.detectionTexture.image.data = detectionData;
+            this.detectionTexture.needsUpdate = true;
+            this.material.uniforms.numDetections.value = detections.length;
+        } catch (error) {
+            console.error('Detection processing error:', error);
+        }
     }
 
     loadImage(file) {
@@ -233,27 +344,63 @@ class OscilineEffect {
         reader.onload = (e) => {
             const img = new Image();
             img.onload = () => {
+                if (img.width === 0 || img.height === 0) {
+                    console.error('Invalid image dimensions');
+                    return;
+                }
+                
                 const texture = new THREE.TextureLoader().load(e.target.result);
                 this.material.uniforms.tDiffuse.value = texture;
                 this.processDetections(img);
             };
+            img.onerror = (error) => {
+                console.error('Image loading error:', error);
+            };
             img.src = e.target.result;
+        };
+        reader.onerror = (error) => {
+            console.error('File reading error:', error);
         };
         reader.readAsDataURL(file);
     }
 
     loadVideo(file) {
         const video = document.createElement('video');
+        
+        video.onloadedmetadata = () => {
+            if (video.videoWidth === 0 || video.videoHeight === 0) {
+                console.error('Invalid video dimensions');
+                return;
+            }
+            
+            video.play();
+            const texture = new THREE.VideoTexture(video);
+            this.material.uniforms.tDiffuse.value = texture;
+            
+            // Process detections every few frames with error handling
+            let processingFrame = false;
+            const processInterval = setInterval(() => {
+                if (!video.paused && !processingFrame && video.readyState >= 4) {
+                    processingFrame = true;
+                    this.processDetections(video)
+                        .finally(() => { processingFrame = false; });
+                }
+                
+                // Clear interval if video is removed
+                if (!this.material.uniforms.tDiffuse.value || 
+                    this.material.uniforms.tDiffuse.value !== texture) {
+                    clearInterval(processInterval);
+                }
+            }, 100);
+        };
+
+        video.onerror = (error) => {
+            console.error('Video loading error:', error);
+        };
+
         video.src = URL.createObjectURL(file);
         video.loop = true;
         video.muted = true;
-        video.play();
-        
-        const texture = new THREE.VideoTexture(video);
-        this.material.uniforms.tDiffuse.value = texture;
-        
-        // Process detections every few frames
-        setInterval(() => this.processDetections(video), 100);
     }
 
     handleResize() {
@@ -437,6 +584,7 @@ class OscilineEffect {
             uniform float waveComplexity;
             uniform float desyncAmount;
             uniform vec2 resolution;
+            uniform vec3 lineColor;
             varying vec2 vUv;
 
             // Improved random function with better distribution
@@ -445,17 +593,32 @@ class OscilineEffect {
             }
 
             float baseWave(vec2 uv, float lineIndex) {
-                // Stabilize wave calculation by rounding time
-                float stabilizedTime = floor(time * 30.0) / 30.0;
+                // More stable time stepping for high amplitudes
+                float stabilizedTime = floor(time * (20.0 / (1.0 + baseAmplitude))) / 20.0;
+                
+                // Pre-calculate common values
                 float wave = 0.0;
-                float linePhase = random(lineIndex) * 6.28318 * desyncAmount;
+                float stabilityFactor = 1.0 / (1.0 + baseAmplitude * 0.5);
+                float linePhase = random(lineIndex) * 6.28318 * desyncAmount * stabilityFactor;
+                
+                // Base frequency scaled by stability
+                float baseFreq = baseFrequency * stabilityFactor;
                 
                 for(float i = 1.0; i <= waveComplexity; i++) {
-                    float phase = stabilizedTime * (0.5 + random(i + lineIndex) * 0.5) + linePhase;
-                    float freq = baseFrequency * (1.0 + random(i * lineIndex) * desyncAmount);
-                    wave += sin(uv.x * freq + phase) * (baseAmplitude / i);
+                    // Reduce randomness at high amplitudes
+                    float randomFactor = random(i + lineIndex) * mix(1.0, 0.3, baseAmplitude);
+                    float phase = stabilizedTime * (0.5 + randomFactor * 0.5) + linePhase;
+                    
+                    // Stabilize frequency variation
+                    float freq = baseFreq * (1.0 + random(i * lineIndex) * desyncAmount * stabilityFactor);
+                    
+                    // Progressive amplitude reduction for higher harmonics
+                    float amp = baseAmplitude / (i + baseAmplitude * 0.5);
+                    wave += sin(uv.x * freq + phase) * amp;
                 }
-                return wave;
+                
+                // Smooth the overall wave
+                return wave * (1.0 - exp(-waveComplexity));
             }
 
             float getImageInfluence(vec2 uv) {
@@ -487,8 +650,9 @@ class OscilineEffect {
                     float dist = abs(uv.y - finalY);
                     float line = float(dist < halfWeight);
                     
-                    vec4 lineColor = vec4(0.0, 1.0, 0.2, 1.0);
-                    finalColor = max(finalColor, line * lineColor);
+                    // Create line color with exact RGB values from uniform
+                    vec4 currentLineColor = vec4(lineColor.rgb, 1.0);
+                    finalColor = max(finalColor, line * currentLineColor);
                 }
 
                 gl_FragColor = finalColor * brightness;

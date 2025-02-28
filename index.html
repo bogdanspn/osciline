@@ -29,19 +29,25 @@
                     <input type="range" id="brightness" min="0" max="200" value="100">
                 </label>
                 <label>Base Amplitude:
-                    <input type="range" id="baseAmplitude" min="1" max="100" value="0">
+                    <input type="range" id="baseAmplitude" min="0" max="100" value="0">
                 </label>
                 <label>Base Frequency:
-                    <input type="range" id="baseFrequency" min="1" max="100" value="0">
+                    <input type="range" id="baseFrequency" min="0" max="100" value="0">
                 </label>
                 <label>Wave Complexity:
-                    <input type="range" id="waveComplexity" min="1" max="10" value="0">
+                    <input type="range" id="waveComplexity" min="0" max="10" value="0">
                 </label>
                 <label>Desync Amount:
                     <input type="range" id="desyncAmount" min="0" max="100" value="0">
                 </label>
+                <label>Line Color:
+                    <input type="color" id="lineColor" value="#00ff33">
+                </label>
             </div>
-            <button id="exportSvg">Export SVG</button>
+            <div class="export-buttons">
+                <button id="exportSvg">Export SVG</button>
+                <button id="recordVideo" class="record">Record Video</button>
+            </div>
             <div id="status">Loading detection model...</div>
         </div>
     </div>
