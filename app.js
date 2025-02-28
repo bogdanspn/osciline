@@ -325,8 +325,8 @@ class OscilineEffect {
     }
 
     async processDetections(image) {
-        if (!this.model || !image || !image.width || !image.height) {
-            console.warn('Invalid image data for detection');
+        if (!this.model || !image || !image.width || !image.height || 
+            (image instanceof HTMLVideoElement && image.readyState !== 4)) {
             return;
         }
         
@@ -380,6 +380,7 @@ class OscilineEffect {
 
     loadVideo(file) {
         const video = document.createElement('video');
+        let detectionTimeout;
         
         video.onloadedmetadata = () => {
             if (video.videoWidth === 0 || video.videoHeight === 0) {
@@ -394,25 +395,37 @@ class OscilineEffect {
             const texture = new THREE.VideoTexture(video);
             this.material.uniforms.tDiffuse.value = texture;
             
-            // Process detections every few frames with error handling
-            let processingFrame = false;
+            // Process detections with better timing
+            let isProcessing = false;
             const processInterval = setInterval(() => {
-                if (!video.paused && !processingFrame && video.readyState >= 4) {
-                    processingFrame = true;
-                    this.processDetections(video)
-                        .finally(() => { processingFrame = false; });
+                if (!video.paused && video.readyState === 4 && !isProcessing) {
+                    isProcessing = true;
+                    
+                    // Clear previous timeout if exists
+                    if (detectionTimeout) clearTimeout(detectionTimeout);
+                    
+                    // Set timeout for next detection
+                    detectionTimeout = setTimeout(() => {
+                        this.processDetections(video).finally(() => {
+                            isProcessing = false;
+                        });
+                    }, 250); // Reduced frequency of detections
                 }
                 
-                // Clear interval if video is removed
+                // Cleanup on video removal or error
                 if (!this.material.uniforms.tDiffuse.value || 
-                    this.material.uniforms.tDiffuse.value !== texture) {
+                    this.material.uniforms.tDiffuse.value !== texture ||
+                    video.error) {
                     clearInterval(processInterval);
+                    if (detectionTimeout) clearTimeout(detectionTimeout);
                 }
-            }, 100);
+            }, 500); // Increased interval
         };
 
+        // Better error handling
         video.onerror = (error) => {
             console.error('Video loading error:', error);
+            document.getElementById('status').textContent = 'Video loading error';
         };
 
         video.src = URL.createObjectURL(file);
